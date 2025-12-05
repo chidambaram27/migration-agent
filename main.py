@@ -1,10 +1,21 @@
 """Main entry point for the repository cloning agent."""
 
 import sys
+import os
 from typing import Optional
+from pathlib import Path
 from langchain_core.messages import HumanMessage
-from agent.graph import get_workflow
 from agent.state import AgentState
+
+# Load environment variables from .env file if it exists
+try:
+    from dotenv import load_dotenv
+    env_path = Path(__file__).parent / ".env"
+    if env_path.exists():
+        load_dotenv(env_path)
+except ImportError:
+    # dotenv is optional, continue without it
+    pass
 
 
 def run_agent(repository_url: str) -> dict:
@@ -22,11 +33,20 @@ def run_agent(repository_url: str) -> dict:
         "repository_url": repository_url,
         "clone_path": None,
         "status": "pending",
-        "error": None
+        "error": None,
+        "via_cbs_file_content": None,
+        "via_cbs_file_path": None,
+        "dockerfile_path": None,
+        "docker_bake_file_path": None,
+        "build_platform": None,
+        "build_as_config": None,
+        "analysis_status": None,
+        "dockerfile_updated": None
     }
     
     # Get the workflow
-    workflow = get_workflow()
+    from agent.graph import create_workflow
+    workflow = create_workflow()
     
     # Run the workflow
     try:

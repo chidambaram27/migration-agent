@@ -38,7 +38,7 @@ env/
 Thumbs.db
 
 # Cloned repositories (optional - remove if you want to track them)
-cloned_repo/
+workspace/
 *.git/
 
 # Environment variables
