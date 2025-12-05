@@ -1,0 +1,12 @@
+# Core LangGraph dependencies
+langgraph>=0.2.0
+langchain-core>=0.3.0
+
+# Optional: For enhanced observability
+# langsmith>=0.1.0
+
+# Development dependencies (optional)
+# pytest>=7.0.0
+# black>=23.0.0
+# mypy>=1.0.0
+

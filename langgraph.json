@@ -1,0 +1,9 @@
+{
+  "dependencies": [
+    "."
+  ],
+  "graphs": {
+    "repository_clone_agent": "./agent/__init__.py:graph"
+  },
+  "env": ".env"
+}
