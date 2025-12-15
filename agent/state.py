@@ -22,6 +22,11 @@ class AgentState(TypedDict):
         build_as_config: Full content inside the buildAs block (e.g., "pythonVersion '3.7.9'")
         analysis_status: Status of the analysis operation (pending, success, error)
         dockerfile_updated: Whether the Dockerfile was updated or was already multi-stage
+        dockerfile_argo_path: Path to the Dockerfile-argo file (with -argo suffix)
+        dockerfile_validation_retry_count: Number of times dockerfile validation has been retried
+        dockerfile_validation_max_retries: Maximum number of retries allowed for dockerfile validation (default: 2)
+        dockerfile_validation_error: Error message from the last dockerfile validation attempt
+        dockerfile_validation_passed: Whether the dockerfile validation passed
     """
     messages: Annotated[list[BaseMessage], add_messages]
     repository_url: str
@@ -36,6 +41,11 @@ class AgentState(TypedDict):
     build_as_config: str | None
     analysis_status: str | None
     dockerfile_updated: bool | None
+    dockerfile_argo_path: str | None
+    dockerfile_validation_retry_count: int | None
+    dockerfile_validation_max_retries: int | None
+    dockerfile_validation_error: str | None
+    dockerfile_validation_passed: bool | None
 
 # class MigrationState(TypedDict):
 #     messages: Annotated[list, add_messages]

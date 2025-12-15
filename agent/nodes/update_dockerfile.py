@@ -33,6 +33,12 @@ def update_dockerfile_node(state: AgentState) -> AgentState:
     build_platform = state.get("build_platform")
     build_as_config = state.get("build_as_config")
     
+    # Initialize retry count and max retries if not set
+    if state.get("dockerfile_validation_retry_count") is None:
+        state["dockerfile_validation_retry_count"] = 0
+    if state.get("dockerfile_validation_max_retries") is None:
+        state["dockerfile_validation_max_retries"] = 2  # Default to 2 retries
+    
     # Check if build_platform has a value
     if not build_platform:
         state["dockerfile_updated"] = False
@@ -58,21 +64,40 @@ def update_dockerfile_node(state: AgentState) -> AgentState:
         )
         return state
     
-    # Resolve full path to Dockerfile
-    full_dockerfile_path = Path(clone_path) / dockerfile_path
+    # Check if this is a retry after validation failure
+    validation_error = state.get("dockerfile_validation_error")
+    retry_count = state.get("dockerfile_validation_retry_count", 0)
     
-    state["messages"].append(
-        AIMessage(content=f"🔍 Checking Dockerfile at {dockerfile_path}...")
-    )
+    # If retrying, read from the existing -argo file, otherwise read from original
+    if validation_error and retry_count > 0:
+        dockerfile_argo_path = state.get("dockerfile_argo_path")
+        if dockerfile_argo_path:
+            # Read from existing -argo file
+            full_dockerfile_path = Path(clone_path) / dockerfile_argo_path
+            state["messages"].append(
+                AIMessage(content=f"🔍 Reading existing Dockerfile-argo at {dockerfile_argo_path} for retry...")
+            )
+        else:
+            # Fallback to original if -argo path not set
+            full_dockerfile_path = Path(clone_path) / dockerfile_path
+            state["messages"].append(
+                AIMessage(content=f"🔍 Reading Dockerfile at {dockerfile_path} for retry...")
+            )
+    else:
+        # First attempt: read from original Dockerfile
+        full_dockerfile_path = Path(clone_path) / dockerfile_path
+        state["messages"].append(
+            AIMessage(content=f"🔍 Checking Dockerfile at {dockerfile_path}...")
+        )
     
     # Read the Dockerfile
     try:
         dockerfile_content = read_dockerfile(str(full_dockerfile_path))
         if dockerfile_content is None:
             state["dockerfile_updated"] = False
-            state["error"] = f"Dockerfile not found at {dockerfile_path}"
+            state["error"] = f"Dockerfile not found at {full_dockerfile_path}"
             state["messages"].append(
-                AIMessage(content=f"❌ Dockerfile not found at {dockerfile_path}")
+                AIMessage(content=f"❌ Dockerfile not found at {full_dockerfile_path}")
             )
             return state
     except Exception as e:
@@ -84,23 +109,44 @@ def update_dockerfile_node(state: AgentState) -> AgentState:
         return state
     
     # Check if Dockerfile is already multi-stage
-    if is_multi_stage_dockerfile(dockerfile_content):
+    # Only skip update if it's already multi-stage AND there's no validation error (first attempt)
+    validation_error = state.get("dockerfile_validation_error")
+    if is_multi_stage_dockerfile(dockerfile_content) and not validation_error:
+        # If already multi-stage and no validation error, construct the -argo path for consistency
+        dockerfile_path_obj = Path(dockerfile_path)
+        if dockerfile_path_obj.suffix:
+            dockerfile_argo_name = dockerfile_path_obj.stem + "-argo" + dockerfile_path_obj.suffix
+        else:
+            dockerfile_argo_name = dockerfile_path_obj.name + "-argo"
+        
+        # Build the path: if parent is ".", just use the name, otherwise use parent/name
+        if dockerfile_path_obj.parent == Path("."):
+            dockerfile_argo_path_str = dockerfile_argo_name
+        else:
+            dockerfile_argo_path_str = str(dockerfile_path_obj.parent / dockerfile_argo_name)
+        
         state["dockerfile_updated"] = True
+        state["dockerfile_argo_path"] = dockerfile_argo_path_str
         state["messages"].append(
             AIMessage(content="✅ Dockerfile is already multi-stage. No update needed.")
         )
         return state
     
-    # Convert to multi-stage using LLM
-    state["messages"].append(
-        AIMessage(content=f"🔄 Converting Dockerfile to multi-stage format using build platform: {build_platform}...")
-    )
+    if validation_error and retry_count > 0:
+        state["messages"].append(
+            AIMessage(content=f"🔄 Retrying Dockerfile conversion (attempt {retry_count + 1}) with validation error context...")
+        )
+    else:
+        state["messages"].append(
+            AIMessage(content=f"🔄 Converting Dockerfile to multi-stage format using build platform: {build_platform}...")
+        )
     
     try:
         updated_dockerfile_content = convert_dockerfile_to_multi_stage(
             dockerfile_content,
             build_platform,
-            build_as_config
+            build_as_config,
+            validation_error
         )
     except Exception as e:
         state["dockerfile_updated"] = False
@@ -112,12 +158,27 @@ def update_dockerfile_node(state: AgentState) -> AgentState:
     
     # Write the updated Dockerfile as Dockerfile-argo
     try:
-        dockerfile_argo_path = write_dockerfile_argo(str(full_dockerfile_path), updated_dockerfile_content)
-        relative_argo_path = Path(dockerfile_argo_path).relative_to(clone_path)
+        # If retrying, write directly to the existing -argo file (full_dockerfile_path already points to it)
+        # Otherwise, create a new -argo file from the original Dockerfile
+        if validation_error and retry_count > 0:
+            # Retry: write directly to the existing -argo file
+            # full_dockerfile_path already points to the -argo file when retrying
+            full_dockerfile_path.write_text(updated_dockerfile_content, encoding='utf-8')
+            relative_argo_path = Path(full_dockerfile_path).relative_to(clone_path)
+            state["dockerfile_argo_path"] = str(relative_argo_path)
+            state["messages"].append(
+                AIMessage(content=f"✅ Successfully updated multi-stage Dockerfile at {relative_argo_path}")
+            )
+        else:
+            # First attempt: create new -argo file from original Dockerfile
+            dockerfile_argo_path = write_dockerfile_argo(str(full_dockerfile_path), updated_dockerfile_content)
+            relative_argo_path = Path(dockerfile_argo_path).relative_to(clone_path)
+            state["dockerfile_argo_path"] = str(relative_argo_path)
+            state["messages"].append(
+                AIMessage(content=f"✅ Successfully created multi-stage Dockerfile at {relative_argo_path}")
+            )
+        
         state["dockerfile_updated"] = True
-        state["messages"].append(
-            AIMessage(content=f"✅ Successfully created multi-stage Dockerfile at {relative_argo_path}")
-        )
     except Exception as e:
         state["dockerfile_updated"] = False
         state["error"] = f"Failed to write Dockerfile-argo: {str(e)}"

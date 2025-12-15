@@ -18,11 +18,12 @@ except ImportError:
     pass
 
 
-def run_agent(repository_url: str) -> dict:
+def run_agent(repository_url: str, dockerfile_validation_max_retries: int = 2) -> dict:
     """Run the repository cloning agent.
     
     Args:
         repository_url: The URL of the repository to clone
+        dockerfile_validation_max_retries: Maximum number of retries for dockerfile validation (default: 2)
         
     Returns:
         Final state dictionary
@@ -41,7 +42,12 @@ def run_agent(repository_url: str) -> dict:
         "build_platform": None,
         "build_as_config": None,
         "analysis_status": None,
-        "dockerfile_updated": None
+        "dockerfile_updated": None,
+        "dockerfile_argo_path": None,
+        "dockerfile_validation_retry_count": None,
+        "dockerfile_validation_max_retries": dockerfile_validation_max_retries,
+        "dockerfile_validation_error": None,
+        "dockerfile_validation_passed": None
     }
     
     # Get the workflow

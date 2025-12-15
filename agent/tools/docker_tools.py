@@ -48,18 +48,23 @@ def is_multi_stage_dockerfile(dockerfile_content: str) -> bool:
 
 
 def write_dockerfile_argo(dockerfile_path: str, content: str) -> str:
-    """Write the updated Dockerfile as Dockerfile-argo in the same directory.
+    """Write the updated Dockerfile with "-argo" suffix in the same directory.
     
     Args:
         dockerfile_path: Path to the original Dockerfile
         content: Content to write to Dockerfile-argo
         
     Returns:
-        Path to the created Dockerfile-argo file
+        Path to the created Dockerfile-argo file (relative to the same base as input)
     """
     original_dockerfile = Path(dockerfile_path)
     dockerfile_dir = original_dockerfile.parent
-    dockerfile_argo_path = dockerfile_dir / "Dockerfile-argo"
+    # Add "-argo" before the extension, or at the end if no extension
+    if original_dockerfile.suffix:
+        dockerfile_argo_name = original_dockerfile.stem + "-argo" + original_dockerfile.suffix
+    else:
+        dockerfile_argo_name = original_dockerfile.name + "-argo"
+    dockerfile_argo_path = dockerfile_dir / dockerfile_argo_name
     
     try:
         dockerfile_argo_path.write_text(content, encoding='utf-8')

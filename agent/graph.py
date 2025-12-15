@@ -6,9 +6,10 @@ from agent.nodes import (
     validate_url_node,
     clone_repository_node,
     analyze_repository_node,
-    update_dockerfile_node,
+    create_and_validate_dockerfile_node,
+    copy_dependencies_node,
     should_continue,
-    should_update_dockerfile
+    should_update_dockerfile_after_deps
 )
 
 
@@ -25,7 +26,8 @@ def create_workflow() -> StateGraph:
     workflow.add_node("validate_url", validate_url_node)
     workflow.add_node("clone_repository", clone_repository_node)
     workflow.add_node("analyze_repository", analyze_repository_node)
-    workflow.add_node("update_dockerfile", update_dockerfile_node)
+    workflow.add_node("create_and_validate_dockerfile", create_and_validate_dockerfile_node)
+    workflow.add_node("copy_dependencies", copy_dependencies_node)
     
     # Set entry point
     workflow.set_entry_point("validate_url")
@@ -43,18 +45,21 @@ def create_workflow() -> StateGraph:
     # Add edge from clone to analyze
     workflow.add_edge("clone_repository", "analyze_repository")
     
-    # Add conditional edge from analyze to update_dockerfile or end
+    # Add edge from analyze to copy_dependencies (always copy dependencies first)
+    workflow.add_edge("analyze_repository", "copy_dependencies")
+    
+    # Add conditional edge from copy_dependencies to create_and_validate_dockerfile or end
     workflow.add_conditional_edges(
-        "analyze_repository",
-        should_update_dockerfile,
+        "copy_dependencies",
+        should_update_dockerfile_after_deps,
         {
-            "update_dockerfile": "update_dockerfile",
+            "update_dockerfile": "create_and_validate_dockerfile",
             "end": END
         }
     )
     
-    # Add edge from update_dockerfile to end
-    workflow.add_edge("update_dockerfile", END)
+    # Add edge from create_and_validate_dockerfile to end (retries are handled within the node)
+    workflow.add_edge("create_and_validate_dockerfile", END)
     
     # Compile the graph
     return workflow.compile()
